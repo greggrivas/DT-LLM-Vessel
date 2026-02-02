@@ -6,6 +6,7 @@ Run this script to create all plots in the output folder.
 
 import pandas as pd
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import seaborn as sns
 import os
 
@@ -49,21 +50,23 @@ def plot_speed_vs_fuel_decay(df):
     print("Created: speed_vs_fuel_decay.png")
 
 def plot_speed_vs_fuel_lines(df):
-    """Line plot of ship speed vs fuel flow - actual data points with lines."""
+    """Line plot of ship speed vs fuel flow - averaged across all turbine decay values."""
     plt.figure(figsize=(10, 6))
 
-    # Select specific compressor decay values AND fix turbine decay = 1.0
-    # This gives exactly 1 point per (speed, compressor_decay) - no averaging needed
+    # Select specific compressor decay values (include ALL turbine decay values)
     selected_decays = [0.95, 0.96, 0.97, 0.98, 0.99, 1.0]
-    df_selected = df[(df['Compressor_Decay'].isin(selected_decays)) & (df['Turbine_Decay'] == 1.0)]
+    df_selected = df[df['Compressor_Decay'].isin(selected_decays)]
 
-    # Plot lines connecting actual data points (no averaging)
+    # Average fuel flow across all turbine decay values for each (compressor_decay, speed)
+    df_avg = df_selected.groupby(['Compressor_Decay', 'Ship_Speed'])['Fuel_Flow'].mean().reset_index()
+
+    # Plot lines connecting averaged data points
     for decay in selected_decays:
-        subset = df_selected[df_selected['Compressor_Decay'] == decay].sort_values('Ship_Speed')
+        subset = df_avg[df_avg['Compressor_Decay'] == decay].sort_values('Ship_Speed')
         plt.plot(subset['Ship_Speed'], subset['Fuel_Flow'],
                  marker='o', markersize=4, linewidth=1.5, label=f'{decay}')
 
-    plt.title('Ship Speed vs Fuel Flow (Turbine Decay = 1.0)')
+    plt.title('Ship Speed vs Fuel Flow (Averaged Across All Turbine Decay Values)')
     plt.xlabel('Ship Speed (knots)')
     plt.ylabel('Fuel Flow (kg/s)')
     plt.legend(title='Compressor Decay')
@@ -87,22 +90,24 @@ def plot_speed_vs_fuel_decay_filtered(df):
     print("Created: speed_vs_fuel_decay_filtered.png")
 
 def plot_speed_vs_fuel_lines_filtered(df):
-    """Line plot of ship speed vs fuel flow - filtered to speed >= 9 knots."""
+    """Line plot of ship speed vs fuel flow - filtered to speed >= 9 knots, averaged across turbine decay."""
     plt.figure(figsize=(10, 6))
 
-    # Select specific compressor decay values, fix turbine decay = 1.0, speed >= 9
+    # Select specific compressor decay values, speed >= 9 (include ALL turbine decay values)
     selected_decays = [0.95, 0.96, 0.97, 0.98, 0.99, 1.0]
     df_selected = df[(df['Compressor_Decay'].isin(selected_decays)) &
-                     (df['Turbine_Decay'] == 1.0) &
                      (df['Ship_Speed'] >= 9)]
 
-    # Plot lines connecting actual data points (no averaging)
+    # Average fuel flow across all turbine decay values for each (compressor_decay, speed)
+    df_avg = df_selected.groupby(['Compressor_Decay', 'Ship_Speed'])['Fuel_Flow'].mean().reset_index()
+
+    # Plot lines connecting averaged data points
     for decay in selected_decays:
-        subset = df_selected[df_selected['Compressor_Decay'] == decay].sort_values('Ship_Speed')
+        subset = df_avg[df_avg['Compressor_Decay'] == decay].sort_values('Ship_Speed')
         plt.plot(subset['Ship_Speed'], subset['Fuel_Flow'],
                  marker='o', markersize=4, linewidth=1.5, label=f'{decay}')
 
-    plt.title('Ship Speed vs Fuel Flow (Turbine Decay = 1.0, Speed >= 9 knots)')
+    plt.title('Ship Speed vs Fuel Flow (Averaged Across Turbine Decay, Speed >= 9 knots)')
     plt.xlabel('Ship Speed (knots)')
     plt.ylabel('Fuel Flow (kg/s)')
     plt.legend(title='Compressor Decay')
@@ -224,6 +229,62 @@ def plot_operating_lines(df):
     print("Created: operating_lines.png")
 
 
+def plot_3d_speed_fuel_decay(df):
+    """3D surface plot of compressor decay, turbine decay, and fuel flow colored by exhaust temp."""
+    import numpy as np
+    from matplotlib import cm
+    from matplotlib.colors import Normalize
+
+    fig = plt.figure(figsize=(12, 9))
+    ax = fig.add_subplot(111, projection='3d')
+
+    # Fix ship speed to 15 knots for a clean surface
+    df_speed = df[df['Ship_Speed'] == 15]
+
+    # Create pivot tables for fuel flow and temperature
+    fuel_pivot = df_speed.pivot_table(
+        values='Fuel_Flow',
+        index='Compressor_Decay',
+        columns='Turbine_Decay',
+        aggfunc='mean'
+    )
+    temp_pivot = df_speed.pivot_table(
+        values='T48',
+        index='Compressor_Decay',
+        columns='Turbine_Decay',
+        aggfunc='mean'
+    )
+
+    # Create meshgrid
+    X = fuel_pivot.columns.values  # Turbine Decay
+    Y = fuel_pivot.index.values    # Compressor Decay
+    X, Y = np.meshgrid(X, Y)
+    Z = fuel_pivot.values          # Fuel Flow
+
+    # Normalize temperature for color mapping
+    norm = Normalize(vmin=temp_pivot.values.min(), vmax=temp_pivot.values.max())
+    colors = cm.hot(norm(temp_pivot.values))
+
+    # Plot surface
+    surf = ax.plot_surface(X, Y, Z, facecolors=colors, alpha=0.9, shade=True)
+
+    ax.set_xlabel('Turbine Decay')
+    ax.set_ylabel('Compressor Decay')
+    ax.set_zlabel('Fuel Flow (kg/s)')
+    ax.set_title('3D Surface: Decay States vs Fuel Flow at 15 knots\n(Color = Exhaust Temperature T48)')
+
+    # Add colorbar
+    mappable = cm.ScalarMappable(norm=norm, cmap='hot')
+    mappable.set_array(temp_pivot.values)
+    cbar = fig.colorbar(mappable, ax=ax, shrink=0.6, pad=0.1)
+    cbar.set_label('Exhaust Temperature T48 (°C)')
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(OUTPUT_FOLDER, "3d_speed_fuel_decay.png"), dpi=300)
+    plt.close()
+    print("Created: 3d_speed_fuel_decay.png")
+
+
 def main():
     """Generate all plots."""
     print("=" * 50)
@@ -248,6 +309,7 @@ def main():
     plot_decay_vs_t48(df)
     plot_decay_distributions(df)
     plot_operating_lines(df)
+    plot_3d_speed_fuel_decay(df)
 
     print("-" * 30)
     print(f"\nAll plots saved to '{OUTPUT_FOLDER}/' folder")

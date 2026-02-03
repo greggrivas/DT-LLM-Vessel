@@ -263,7 +263,7 @@ def plot_3d_speed_fuel_decay(df):
 
     # Normalize temperature for color mapping
     norm = Normalize(vmin=temp_pivot.values.min(), vmax=temp_pivot.values.max())
-    colors = cm.hot(norm(temp_pivot.values))
+    colors = cm.hot_r(norm(temp_pivot.values))
 
     # Plot surface
     surf = ax.plot_surface(X, Y, Z, facecolors=colors, alpha=0.9, shade=True)
@@ -274,7 +274,7 @@ def plot_3d_speed_fuel_decay(df):
     ax.set_title('3D Surface: Decay States vs Fuel Flow at 15 knots\n(Color = Exhaust Temperature T48)')
 
     # Add colorbar
-    mappable = cm.ScalarMappable(norm=norm, cmap='hot')
+    mappable = cm.ScalarMappable(norm=norm, cmap='hot_r')
     mappable.set_array(temp_pivot.values)
     cbar = fig.colorbar(mappable, ax=ax, shrink=0.6, pad=0.1)
     cbar.set_label('Exhaust Temperature T48 (°C)')
